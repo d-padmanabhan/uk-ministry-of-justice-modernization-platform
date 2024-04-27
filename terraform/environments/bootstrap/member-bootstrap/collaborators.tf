@@ -17,6 +17,10 @@ module "collaborator_readonly_role" {
   ]
 }
 
+data "aws_iam_policy" "common_policy" {
+  name = "common_policy"
+}
+
 # security audit role for collaborators
 module "collaborator_security_audit_role" {
   # checkov:skip=CKV_TF_1:
@@ -56,8 +60,9 @@ module "collaborator_developer_role" {
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/ReadOnlyAccess",
     data.aws_iam_policy.developer.arn,
+    data.aws_iam_policy.common_policy.arn,
   ]
-  number_of_custom_role_policy_arns = 2
+  number_of_custom_role_policy_arns = 3
 }
 
 data "aws_iam_policy" "developer" {
@@ -81,14 +86,19 @@ module "collaborator_sandbox_role" {
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/ReadOnlyAccess",
     data.aws_iam_policy.sandbox.arn,
+    data.aws_iam_policy.common_policy.arn,
+    data.aws_iam_policy.bedrock.arn,
   ]
-  number_of_custom_role_policy_arns = 2
+  number_of_custom_role_policy_arns = 3
 }
 
 data "aws_iam_policy" "sandbox" {
   name = "sandbox_policy"
 }
 
+data "aws_iam_policy" "bedrock" {
+  name = "bedrock_policy"
+}
 # Collaborator Migration role
 module "collaborator_migration_role" {
   # checkov:skip=CKV_TF_1:
@@ -111,12 +121,40 @@ module "collaborator_migration_role" {
     "arn:aws:iam::aws:policy/ServerMigrationConnector",
     "arn:aws:iam::aws:policy/AWSApplicationMigrationEC2Access",
     data.aws_iam_policy.migration.arn,
+    data.aws_iam_policy.developer.arn,
+    data.aws_iam_policy.common_policy.arn,
   ]
-  number_of_custom_role_policy_arns = 7
+  number_of_custom_role_policy_arns = 9
 }
 
 data "aws_iam_policy" "migration" {
   name = "migration_policy"
+}
+
+# Collaborator Instance Access role
+module "collaborator_instance_access_role" {
+  # checkov:skip=CKV_TF_1:
+  count   = local.account_data.account-type == "member" ? 1 : 0
+  source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role"
+  version = "~> 5"
+  trusted_role_arns = [
+    local.modernisation_platform_account.id
+  ]
+
+  create_role       = true
+  role_name         = "instance-access"
+  role_requires_mfa = true
+
+  custom_role_policy_arns = [
+    "arn:aws:iam::aws:policy/ReadOnlyAccess",
+    data.aws_iam_policy.instance-access.arn,
+    data.aws_iam_policy.common_policy.arn,
+  ]
+  number_of_custom_role_policy_arns = 3
+}
+
+data "aws_iam_policy" "instance-access" {
+  name = "instance_access_policy"
 }
 
 # Collaborator Database Management role
@@ -136,8 +174,9 @@ module "collaborator_database_mgmt_role" {
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/ReadOnlyAccess",
     data.aws_iam_policy.instance-management.arn,
+    data.aws_iam_policy.common_policy.arn,
   ]
-  number_of_custom_role_policy_arns = 2
+  number_of_custom_role_policy_arns = 3
 }
 
 data "aws_iam_policy" "instance-management" {
@@ -160,9 +199,10 @@ module "collaborator_fleet_manager_role" {
 
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/ReadOnlyAccess",
-    data.aws_iam_policy.fleet_manager.arn
+    data.aws_iam_policy.fleet_manager.arn,
+    data.aws_iam_policy.common_policy.arn,
   ]
-  number_of_custom_role_policy_arns = 2
+  number_of_custom_role_policy_arns = 3
 }
 
 data "aws_iam_policy" "fleet_manager" {

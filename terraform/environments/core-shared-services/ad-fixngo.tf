@@ -43,7 +43,7 @@ locals {
         subnet_id                 = aws_subnet.live-data-additional["eu-west-2a"].id
         vpc_security_group_name   = "ad_hmpp_dc_sg"
         tags = {
-          server-type = "DomainJoin"
+          server-type = "DomainController"
           domain-name = "azure.hmpp.root"
           description = "domain controller for FixNGo azure.hmpp.root domain"
         }
@@ -58,7 +58,7 @@ locals {
       #   subnet_id                 = aws_subnet.live-data-additional["eu-west-2b"].id
       #   vpc_security_group_name   = "ad_hmpp_dc_sg"
       #   tags = {
-      #     server-type = "DomainJoin"
+      #     server-type = "DomainController"
       #     domain-name = "azure.hmpp.root"
       #     description = "domain controller for FixNGo azure.hmpp.root domain"
       #   }

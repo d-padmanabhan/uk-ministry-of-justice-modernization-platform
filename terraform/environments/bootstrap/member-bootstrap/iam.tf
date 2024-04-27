@@ -167,7 +167,9 @@ data "aws_iam_policy_document" "member-access" {
       "redshift-data:*",
       "redshift-serverless:*",
       "resource-explorer-2:*",
-      "transfer:*"
+      "transfer:*",
+      "kinesisanalytics:*Application*",
+      "kinesisanalytics:*Resource"
     ]
     resources = ["*"] #tfsec:ignore:AWS099 tfsec:ignore:AWS097
   }
@@ -464,11 +466,13 @@ data "aws_iam_policy_document" "policy" {
       "kms:DescribeKey",
       "kms:Decrypt",
       "kms:GenerateDataKey",
+      "kms:CreateGrant",
       "logs:CreateLogGroup",
       "logs:DescribeLogGroups",
       "logs:DescribeResourcePolicies",
       "logs:GetLogEvents",
       "rds:*Tag*",
+      "rds:*Snapshot*",
       "s3:GetBucketLocation",
       "s3:ListBucket",
       "s3:ListAllMyBuckets",

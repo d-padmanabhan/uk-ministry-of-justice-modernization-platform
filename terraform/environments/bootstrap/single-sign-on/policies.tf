@@ -1,6 +1,13 @@
 # IAM policies used for SSO and collaborator roles
 
-# common policy statements
+# common policy and statements
+resource "aws_iam_policy" "common_policy" {
+  provider = aws.workspace
+  name     = "common_policy"
+  path     = "/"
+  policy   = data.aws_iam_policy_document.common_statements.json
+}
+
 #tfsec:ignore:aws-iam-no-policy-wildcards
 data "aws_iam_policy_document" "common_statements" {
   statement {
@@ -84,7 +91,16 @@ data "aws_iam_policy_document" "common_statements" {
   }
 }
 
+
 # bedrock console policy -- to be retired when terraform support is introduced
+# bedrock policy - member SSO and collaborators
+resource "aws_iam_policy" "bedrock_policy" {
+  provider = aws.workspace
+  name     = "bedrock_policy"
+  path     = "/"
+  policy   = data.aws_iam_policy_document.bedrock_console.json
+}
+
 # source: https://docs.aws.amazon.com/bedrock/latest/userguide/security_iam_id-based-policy-examples.html#security_iam_id-based-policy-examples-console
 #tfsec:ignore:aws-iam-no-policy-wildcards
 data "aws_iam_policy_document" "bedrock_console" {
@@ -161,7 +177,6 @@ data "aws_iam_policy_document" "developer_additional" {
   #checkov:skip=CKV_AWS_111
   #checkov:skip=CKV_AWS_110
   #checkov:skip=CKV_AWS_356: Needs to access multiple resources
-  source_policy_documents = [data.aws_iam_policy_document.common_statements.json]
   statement {
     sid    = "developerAllow"
     effect = "Allow"
@@ -252,7 +267,10 @@ data "aws_iam_policy_document" "developer_additional" {
       "states:Describe*",
       "states:List*",
       "states:Stop*",
-      "states:Start*"
+      "states:Start*",
+      "kinesisanalytics:List*",
+      "kinesisanalytics:Describe*",
+      "kinesisanalytics:DiscoverInputSchema",
     ]
     resources = ["*"]
   }
@@ -318,6 +336,14 @@ data "aws_iam_policy_document" "developer_additional" {
   }
 }
 
+# data engineerin policy (developer + glue + some athena)
+resource "aws_iam_policy" "data_engineering" {
+  provider = aws.workspace
+  name     = "data_engineering_policy"
+  path     = "/"
+  policy   = data.aws_iam_policy_document.data_engineering_additional.json
+}
+
 #tfsec:ignore:aws-iam-no-policy-wildcards
 data "aws_iam_policy_document" "data_engineering_additional" {
   #checkov:skip=CKV_AWS_108
@@ -325,7 +351,6 @@ data "aws_iam_policy_document" "data_engineering_additional" {
   #checkov:skip=CKV_AWS_111
   #checkov:skip=CKV_AWS_110
   #checkov:skip=CKV_AWS_356: Needs to access multiple resources
-  source_policy_documents = [data.aws_iam_policy_document.developer_additional.json] # this is a developer++ policy with additional permissions required for data engineering
   statement {
     sid    = "DataEngineeringAllow"
     effect = "Allow"
@@ -382,13 +407,7 @@ data "aws_iam_policy_document" "data_engineering_additional" {
   }
 }
 
-# data engineerin policy (developer + glue + some athena)
-resource "aws_iam_policy" "data_engineering" {
-  provider = aws.workspace
-  name     = "data_engineering_policy"
-  path     = "/"
-  policy   = data.aws_iam_policy_document.data_engineering_additional.json
-}
+
 
 # sandbox policy - member SSO and collaborators, development accounts only
 resource "aws_iam_policy" "sandbox" {
@@ -407,7 +426,6 @@ data "aws_iam_policy_document" "sandbox_additional" {
   #checkov:skip=CKV_AWS_110
   #checkov:skip=CKV2_AWS_40
   #checkov:skip=CKV_AWS_356: Needs to access multiple resources
-  source_policy_documents = [data.aws_iam_policy_document.common_statements.json, data.aws_iam_policy_document.bedrock_console.json]
   # added as a source document to ease retirement
   statement {
     sid    = "sandboxAllow"
@@ -525,7 +543,8 @@ data "aws_iam_policy_document" "sandbox_additional" {
       "support:*",
       "textract:*",
       "wafv2:*",
-      "wellarchitected:*"
+      "wellarchitected:*",
+      "kinesisanalytics:*"
     ]
     resources = ["*"] #tfsec:ignore:AWS099 tfsec:ignore:AWS097
   }
@@ -548,8 +567,6 @@ data "aws_iam_policy_document" "migration_additional" {
   #checkov:skip=CKV_AWS_109
   #checkov:skip=CKV_AWS_110
   #checkov:skip=CKV_AWS_356: Needs to access multiple resources
-  source_policy_documents   = [data.aws_iam_policy_document.developer_additional.json]
-  override_policy_documents = [data.aws_iam_policy_document.common_statements.json]
   statement {
     sid    = "migrationAllow"
     effect = "Allow"
@@ -560,8 +577,10 @@ data "aws_iam_policy_document" "migration_additional" {
       "drs:*",
       "mgh:*",
       "mgn:*",
-      "sts:DecodeAuthorizationMessage",
-      "migrationhub-strategy:*"
+      "migrationhub-strategy:*",
+      "ssm:*",
+      "ssm-guiconnect:*",
+      "sts:DecodeAuthorizationMessage"
     ]
     resources = ["*"] #tfsec:ignore:AWS099 tfsec:ignore:AWS097
   }
@@ -591,6 +610,157 @@ data "aws_iam_policy_document" "migration_additional" {
   }
 }
 
+# instance access - member SSO and collaborators
+resource "aws_iam_policy" "instance-access" {
+  provider = aws.workspace
+  name     = "instance_access_policy"
+  path     = "/"
+  policy   = data.aws_iam_policy_document.instance-access-document.json
+}
+
+# cut down version of instance-management policy
+# Use instance-access-policy tag on resources to control access:
+#   tag doesn't exist = s3 put; no secret access;  ec2 ssm full access
+#   "none"            = s3 put; no secret access;  no ec2 ssm access
+#   "limited"         = s3 put; read-only  secret; ec2 ssm ssh/port-forwarding only
+#   "full"            = s3 put; read-write secret; ec2 ssm full access; ec2 sso local admin
+#tfsec:ignore:aws-iam-no-policy-wildcards
+data "aws_iam_policy_document" "instance-access-document" {
+  #checkov:skip=CKV_AWS_107
+  #checkov:skip=CKV_AWS_108
+  #checkov:skip=CKV_AWS_109
+  #checkov:skip=CKV_AWS_111
+  #checkov:skip=CKV_AWS_110
+  #checkov:skip=CKV_AWS_356: Needs to access multiple resources
+  source_policy_documents = [data.aws_iam_policy_document.common_statements.json]
+  statement {
+    sid    = "InstanceAccess"
+    effect = "Allow"
+    actions = [
+      "ec2:GetPasswordData",
+      "kms:Decrypt*",
+      "kms:Encrypt",
+      "kms:ReEncrypt*",
+      "kms:GenerateDataKey*",
+      "kms:DescribeKey",
+      "rhelkb:GetRhelURL",
+      "s3:PutObject",
+      "ssm-guiconnect:*",
+    ]
+    resources = ["*"]
+  }
+  statement {
+    sid    = "SecretsManagerGet"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue",
+    ]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "secretsmanager:ResourceTag/instance-access-policy"
+      values   = ["limited"]
+    }
+  }
+  statement {
+    sid    = "SecretsManagerPut"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:PutSecretValue",
+    ]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "secretsmanager:ResourceTag/instance-access-policy"
+      values   = ["full"]
+    }
+  }
+  statement {
+    sid    = "SSMStartSessionPortForwarding"
+    effect = "Allow"
+    actions = [
+      "ssm:StartSession"
+    ]
+    resources = [
+      "arn:aws:ec2:*:*:instance/*",
+      "arn:aws:ssm:*:*:managed-instance/*",
+      "arn:aws:ssm:*:*:document/AWS-StartPortForwardingSession",
+    ]
+    condition {
+      test     = "BoolIfExists"
+      variable = "ssm:SessionDocumentAccessCheck"
+      values   = ["true"]
+    }
+    condition {
+      test     = "StringEqualsIfExists"
+      variable = "ssm:resourceTag/instance-access-policy"
+      values   = ["limited"] # doesn't work as expected with granular tags, e.g. use ssh/portforward
+    }
+  }
+  statement {
+    sid    = "SSMStartSessionSSH"
+    effect = "Allow"
+    actions = [
+      "ssm:StartSession"
+    ]
+    resources = [
+      "arn:aws:ec2:*:*:instance/*",
+      "arn:aws:ssm:*:*:managed-instance/*",
+      "arn:aws:ssm:*:*:document/AWS-StartSSHSession",
+    ]
+    condition {
+      test     = "BoolIfExists"
+      variable = "ssm:SessionDocumentAccessCheck"
+      values   = ["true"]
+    }
+    condition {
+      test     = "StringEqualsIfExists"
+      variable = "ssm:resourceTag/instance-access-policy"
+      values   = ["limited"]
+    }
+  }
+  statement {
+    sid    = "SSMStartSession"
+    effect = "Allow"
+    actions = [
+      "ssm:StartSession"
+    ]
+    resources = [
+      "arn:aws:ec2:*:*:instance/*",
+      "arn:aws:ssm:*:*:managed-instance/*",
+    ]
+    condition {
+      test     = "StringEqualsIfExists"
+      variable = "ssm:resourceTag/instance-access-policy"
+      values   = ["full"]
+    }
+  }
+
+  statement {
+    sid    = "SSMSendCommand"
+    effect = "Allow"
+    actions = [
+      "ssm:SendCommand",
+    ]
+    resources = [
+      "arn:aws:ec2:*:*:instance/*",
+      "arn:aws:ssm:*:*:managed-instance/*",
+      "arn:aws:ssm:*:*:document/AWSSSO-CreateSSOUser"
+    ]
+    condition {
+      test     = "BoolIfExists"
+      variable = "ssm:SessionDocumentAccessCheck"
+      values   = ["true"]
+    }
+    condition {
+      test     = "StringEqualsIfExists"
+      variable = "ssm:resourceTag/instance-access-policy"
+      values   = ["full"]
+    }
+  }
+
+}
 
 # instance management - member SSO and collaborators
 resource "aws_iam_policy" "instance-management" {
@@ -608,11 +778,13 @@ data "aws_iam_policy_document" "instance-management-document" {
   #checkov:skip=CKV_AWS_111
   #checkov:skip=CKV_AWS_110
   #checkov:skip=CKV_AWS_356: Needs to access multiple resources
-  source_policy_documents = [data.aws_iam_policy_document.common_statements.json]
   statement {
     sid    = "databaseAllow"
     effect = "Allow"
     actions = [
+      "application-autoscaling:ListTagsForResource",
+      "autoscaling:UpdateAutoScalingGroup",
+      "autoscaling:SetDesiredCapacity",
       "aws-marketplace:ViewSubscriptions",
       "ds:*Tags*",
       "ds:*Snapshot*",
@@ -710,7 +882,6 @@ data "aws_iam_policy_document" "reporting-operations" {
   #checkov:skip=CKV_AWS_109
   #checkov:skip=CKV_AWS_110
   #checkov:skip=CKV_AWS_356:
-  override_policy_documents = [data.aws_iam_policy_document.common_statements.json]
   statement {
     sid    = "reportingOperationsAllow"
     effect = "Allow"
@@ -794,6 +965,8 @@ data "aws_iam_policy_document" "reporting-operations" {
       "glue:GetJobs",
       "glue:GetJobRun",
       "glue:GetJobRuns",
+      "glue:StartTrigger",
+      "glue:StopTrigger",
       "logs:DescribeLogStreams",
       "logs:GetLogEvents",
       "dynamodb:BatchGet*",
@@ -815,7 +988,14 @@ data "aws_iam_policy_document" "reporting-operations" {
       "cloudwatch:ListDashboards",
       "states:StartExecution",
       "states:StopExecution",
-      "states:RedriveExecution"
+      "states:RedriveExecution",
+      "kinesisanalytics:StartApplication",
+      "kinesisanalytics:StopApplication",
+      "kinesisanalytics:CreateApplicationSnapshot",
+      "kinesisanalytics:List*",
+      "kinesisanalytics:Describe*",
+      "kinesisanalytics:DiscoverInputSchema",
+      "kinesisanalytics:RollbackApplication"
     ]
     resources = ["*"] #tfsec:ignore:AWS099 tfsec:ignore:AWS097
   }
@@ -829,7 +1009,6 @@ data "aws_iam_policy_document" "powerbi_user_additional" {
   #checkov:skip=CKV_AWS_109
   #checkov:skip=CKV_AWS_110
   #checkov:skip=CKV_AWS_356: Needs to access multiple resources
-  override_policy_documents = [data.aws_iam_policy_document.common_statements.json]
   statement {
     effect = "Allow"
     resources = [
@@ -972,7 +1151,7 @@ resource "aws_iam_policy" "fleet-manager-policy" {
 data "aws_iam_policy_document" "fleet-manager-document" {
   #checkov:skip=CKV_AWS_111 Needs to access multiple resources and the policy is attached to a role that is scoped to a specific account
   #checkov:skip=CKV_AWS_356 Needs to access multiple resources and the policy is attached to a role that is scoped to a specific account
-  override_policy_documents = [data.aws_iam_policy_document.common_statements.json]
+
   statement {
     sid    = "FleetManagerAllow"
     effect = "Allow"
